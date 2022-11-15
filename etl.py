@@ -4,6 +4,7 @@ import os
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import udf, col
 from pyspark.sql.functions import year, month, dayofmonth, hour, weekofyear, date_format
+from pyspark.sql.types import TimestampType
 
 
 config = configparser.ConfigParser()
@@ -57,23 +58,22 @@ def process_log_data(spark, input_data, output_data):
     users_table.write.mode('overwrite').parquet(path=output_data + 'users')
 
     # create timestamp column from original timestamp column
+    global log_df
     get_timestamp = udf(lambda x: x / 1000, TimestampType())
     log_df = log_df.withColumn("timestamp", get_timestamp(log_df.ts))
     
     # create datetime column from original timestamp column
-    get_datetime = udf(lambda x: datetime.fromtimestamp(x), TimestampType())
-    log_df = log_df.withColumn("start_time", get_datetime(log_df.timestamp))
-    
+    get_timestamp = F.udf(lambda ts: datetime.fromtimestamp(ts/1000).isoformat())
+    df = df.withColumn('start_time', get_timestamp('ts').cast(TimestampType()))
+
     # extract columns to create time table
-    df = df.withColumn('start_time', (df['ts']/1000).cast('timestamp'))
-    df = df.withColumn('weekday', date_format(df['start_time'], 'E'))
-    df = df.withColumn('year', year(df['start_time']))
-    df = df.withColumn('month', month(df['start_time']))
-    df = df.withColumn('week', weekofyear(df['start_time']))
-    df = df.withColumn('day', dayofmonth(df['start_time']))
-    df = df.withColumn('hour', hour(df['start_time']))
-    time_table = df.select('start_time', 'weekday', 'year', 'month',\
-                           'week', 'day', 'hour').distinct()
+    time_table = df.select('start_time')
+    time_table = time_table.withColumn('hour', F.hour('start_time'))
+    time_table = time_table.withColumn('day', F.dayofmonth('start_time'))
+    time_table = time_table.withColumn('week', F.weekofyear('start_time'))
+    time_table = time_table.withColumn('month', F.month('start_time'))
+    time_table = time_table.withColumn('year', F.year('start_time'))
+    time_table = time_table.withColumn('weekday', F.dayofweek('start_time'))
     
     # write time table to parquet files partitioned by year and month
     time_table.write.mode('overwrite').partitionBy('year', 'month').parquet(path=output_data + 'time')
