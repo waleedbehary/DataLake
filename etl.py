@@ -2,6 +2,7 @@ import configparser
 from datetime import datetime
 import os
 from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
 from pyspark.sql.functions import udf, col
 from pyspark.sql.functions import year, month, dayofmonth, hour, weekofyear, date_format
 from pyspark.sql.types import TimestampType
@@ -60,7 +61,7 @@ def process_log_data(spark, input_data, output_data):
     # create timestamp column from original timestamp column
     global log_df
     get_timestamp = udf(lambda x: x / 1000, TimestampType())
-    log_df = log_df.withColumn("timestamp", get_timestamp(log_df.ts))
+    log_df = df.withColumn("timestamp", get_timestamp(df.ts))   
     
     # create datetime column from original timestamp column
     get_timestamp = F.udf(lambda ts: datetime.fromtimestamp(ts/1000).isoformat())
